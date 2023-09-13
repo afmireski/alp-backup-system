@@ -5,3 +5,9 @@ type Node interface {
 	Search()
 	Sort()
 }
+
+type NodeKey interface {
+	~int32 | ~string
+}
+
+type NodeValue interface {} // any
