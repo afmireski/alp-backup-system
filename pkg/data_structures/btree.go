@@ -65,36 +65,7 @@ func (btn *BTreeNode) Insert(key, value int) (*BTreeNode) {
 
 	if btn.Len == btn.M {
 		// split
-		mid := btn.M/2
-
-		beforeKeys := btn.Key[0:mid-1]
-		beforeValues := btn.Value[0:mid-1]
-
-		afterKeys := btn.Key[mid+1:btn.M]
-		afterValues := btn.Value[mid+1:btn.M]
-
-		beforeNode := BTreeNode{
-			Len: len(beforeKeys),
-			Key: beforeKeys,
-			Value: beforeValues,
-			M: btn.M,
-			IsLeaf: true,
-			Chields: nil,
-		}
-
-		afterNode := BTreeNode{
-			Len: len(afterKeys),
-			Key: afterKeys,
-			Value: afterValues,
-			M: btn.M,
-			IsLeaf: true,
-			Chields: nil,
-		}
-
-		btn.Chields = append(btn.Chields, &beforeNode, &afterNode)	
-		btn.Len = 1
-		btn.Key = btn.Key[mid:mid+1]
-		btn.Value = btn.Value[mid:mid+1]
+		
 	}
 
 	return btn
