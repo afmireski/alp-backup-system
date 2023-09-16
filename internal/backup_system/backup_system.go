@@ -3,16 +3,13 @@ package backup_system
 import (
 	"errors"
 	"fmt"
+	"github.com/afmireski/alp-backup-system/internal/data_structures"
 	"os"
 	"strings"
-
 	"time"
-
-	"github.com/afmireski/alp-backup-system/internal/data_structures"
 )
 
 type BackupSystem interface {
-	Init() BackupSystem
 	SetBackupSrc(path string) error
 	Sync() error
 }
@@ -36,7 +33,19 @@ type MyBackupSystem struct {
 	backupHistory data_structures.BackupTable[FileMetadata]
 }
 
-func (mbs MyBackupSystem) Init(dst string) MyBackupSystem {
+func (mbs *MyBackupSystem) Print() {
+	fmt.Println("\n\n-------------- BACKUP  SYSTEM --------------")
+	fmt.Println("- - - - - - - - - - - - - - - - - - - - - -")
+	fmt.Printf("| backupDst=%s |\n", mbs.backupDst)
+	fmt.Printf("| backupSrc=%s |\n", mbs.backupSrc)
+	fmt.Printf("| backupSrc=%s |\n", mbs.srcDir)
+	fmt.Printf("| syncedAt=%d/%d/%d  %d:%d:%d |\n", mbs.syncedAt.Year(), mbs.syncedAt.Month(), mbs.syncedAt.Day(), mbs.syncedAt.Hour(), mbs.syncedAt.Minute(), mbs.syncedAt.Second())
+	mbs.backupHistory.Print()
+	fmt.Println("- - - - - - - - - - - - - - - - - - - - - -\n\n")
+
+}
+
+func InitBackupSystem(dst string) MyBackupSystem {
 	return MyBackupSystem{
 		syncedAt:      time.Now(),
 		backupSrc:     "",
@@ -65,7 +74,7 @@ func (mbs *MyBackupSystem) Sync() error {
 	defer mbs.setSyncedAt()
 
 	if len(mbs.backupSrc) > 0 {
-		mbs.sync(mbs.backupSrc)
+		return mbs.sync(mbs.backupSrc)
 	}
 	return nil
 }
@@ -85,6 +94,14 @@ func (mbs *MyBackupSystem) sync(path string) error {
 
 					if !existsPath {
 						mbs.mkdir(path, pathInfo.Mode())
+
+						metadata := FileMetadata{
+							Path:       path,
+							Filename:   pathInfo.Name(),
+							IsDir:      pathInfo.IsDir(),
+							ModifiedAt: pathInfo.ModTime(),
+						}
+						mbs.backupHistory.Insert(path, metadata)
 					}
 
 					for _, dirItem := range dirContent { // Percorre os conteúdos do diretório
@@ -95,8 +112,11 @@ func (mbs *MyBackupSystem) sync(path string) error {
 				return dirErr // Retorna o erro
 			}
 		} else { // Se não é um diretório, então, é um arquivo
-
 			if existsPath {
+				fmt.Println("!!!Achou!!!")
+				fmt.Println(pathInfo.ModTime())
+				fmt.Println("==?")
+				fmt.Println(value.ModifiedAt)
 				// Verifica se o arquivo não foi modificado
 				if pathInfo.ModTime().Equal(value.ModifiedAt) {
 					return nil // Não faz nada
@@ -113,7 +133,7 @@ func (mbs *MyBackupSystem) sync(path string) error {
 				Path:       path,
 				Filename:   pathInfo.Name(),
 				IsDir:      pathInfo.IsDir(),
-				ModifiedAt: time.Now(),
+				ModifiedAt: pathInfo.ModTime(),
 			}
 
 			mbs.backupHistory.Insert(path, metadata) // Atualiza o histórico de Backup
@@ -127,6 +147,8 @@ func (mbs *MyBackupSystem) mkdir(path string, fileMode os.FileMode) error {
 	dirPath := mbs.backupDst + mbs.srcDir + after      // Monta o caminho correto para a cópia
 	err := os.Mkdir(dirPath, fileMode)
 
+	fmt.Printf("--- \n mkdir: %s! \n ---", dirPath,)
+
 	return err
 }
 
@@ -136,12 +158,14 @@ func (mbs *MyBackupSystem) copy(path string, fileMode os.FileMode) error {
 		return errors.New("Falha ao ler o conteúdo de " + path)
 	}
 	after, _ := strings.CutPrefix(path, mbs.backupSrc) // Remove todo caminho até o diretório de backup
-	bPath := mbs.backupDst + mbs.srcDir + after  // Monta o caminho correto para a cópia
+	bPath := mbs.backupDst + mbs.srcDir + after        // Monta o caminho correto para a cópia
 
 	err = os.WriteFile(bPath, fileData, fileMode)
+
+	fmt.Printf("--- \n copy: %s \n para \n %s \n ---", path, bPath)
 	return err
 }
 
-func (mbs* MyBackupSystem) setSyncedAt() {
+func (mbs *MyBackupSystem) setSyncedAt() {
 	mbs.syncedAt = time.Now()
 }
