@@ -5,58 +5,58 @@ import (
 	"fmt"
 )
 
-type HashTable interface {
-	Hash(key string) string 
+type HashTable[T any] interface {
+	Hash(key string) string
 	Alpha() float32
-	Insert(key string, value uint) string
-	Search(key string) (string, uint, bool)
+	Insert(key string, value T) string
+	Search(key string) (string, T, bool)
 	Resize()
 	Print()
 	GetM() uint
 	GetN() uint
 }
 
-type BackupTable struct {
+type BackupTable[T any] struct {
 	size uint // M
 	len  uint // N
-	data map[string]uint
+	data map[string]T
 }
 
-func CreateBackupTable(m uint) BackupTable {
-	return BackupTable{
+func CreateBackupTable[T any](m uint) BackupTable[T] {
+	return BackupTable[T]{
 		size: m,
-		len: 0,
-		data: make(map[string]uint, m),
+		len:  0,
+		data: make(map[string]T, m),
 	}
 }
 
-func (bt BackupTable) GetM() (uint) {
+func (bt BackupTable[T]) GetM() uint {
 	return bt.size
 }
 
-func (bt BackupTable) GetN() (uint) {
+func (bt BackupTable[T]) GetN() uint {
 	return bt.len
 }
 
-func (bt* BackupTable) Alpha() float32 {
-	return float32(bt.len)/float32(bt.size)
+func (bt *BackupTable[T]) Alpha() float32 {
+	return float32(bt.len) / float32(bt.size)
 }
 
-func (bt* BackupTable) Hash(key string) string {
+func (bt *BackupTable[T]) Hash(key string) string {
 	shaBytes := sha256.Sum256([]byte(key))
 	return string(shaBytes[:])
 }
 
-func (bt* BackupTable) Search(key string) (string, uint, bool) {
+func (bt *BackupTable[T]) Search(key string) (string, T, bool) {
 	hashKey := bt.Hash(key)
 
 	value, exists := bt.data[hashKey]
-	
+
 	return hashKey, value, exists
 }
 
-func (bt* BackupTable) Resize(newM uint) {
-	newData := make(map[string]uint, newM)
+func (bt *BackupTable[T]) Resize(newM uint) {
+	newData := make(map[string]T, newM)
 	for key, value := range bt.data {
 		newData[key] = value
 	}
@@ -65,12 +65,12 @@ func (bt* BackupTable) Resize(newM uint) {
 	bt.data = newData
 }
 
-func (bt* BackupTable) Insert(key string, value uint) string {
+func (bt *BackupTable[T]) Insert(key string, value T) string {
 	hash, _, exists := bt.Search(key)
 
 	if !exists {
-		if (bt.Alpha() > 0.5) { 
-			bt.Resize(bt.size*2)
+		if bt.Alpha() > 0.5 {
+			bt.Resize(bt.size * 2)
 		}
 
 		bt.len++
@@ -81,12 +81,12 @@ func (bt* BackupTable) Insert(key string, value uint) string {
 	return hash
 }
 
-func (bt* BackupTable) Print() {
+func (bt *BackupTable[T]) Print() {
 	fmt.Println("-------------- BACKUP  TABLE --------------")
 	fmt.Printf("| m = %d --------------------------- n = %d |\n", bt.size, bt.len)
 	fmt.Println("- - - - - - - - - - - - - - - - - - - - - -")
 	for key, value := range bt.data {
-		fmt.Printf("| %x | %d |\n", key, value)
+		fmt.Printf("| %x | %s |\n", key, value)
 	}
 	fmt.Println("- - - - - - - - - - - - - - - - - - - - - -")
 }
