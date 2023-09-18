@@ -12,6 +12,9 @@ import (
 type BackupSystem interface {
 	SetBackupSrc(path string) error
 	Sync() error
+	EnablePeriodicBackup(interval uint64)
+	DisablePeriodicBackup()
+	periodicBackupTask()
 }
 
 type FileMetadata struct {
@@ -26,11 +29,13 @@ func (fm FileMetadata) String() string {
 }
 
 type MyBackupSystem struct {
-	syncedAt      time.Time
-	backupSrc     string
-	srcDir        string
-	backupDst     string
-	backupHistory data_structures.BackupTable[FileMetadata]
+	periodicBackup bool
+	backupInterval uint64
+	syncedAt       time.Time
+	backupSrc      string
+	srcDir         string
+	backupDst      string
+	backupHistory  data_structures.BackupTable[FileMetadata]
 }
 
 func (mbs *MyBackupSystem) Print() {
@@ -47,6 +52,8 @@ func (mbs *MyBackupSystem) Print() {
 
 func InitBackupSystem(dst string) MyBackupSystem {
 	return MyBackupSystem{
+		periodicBackup: false,
+		backupInterval: 0,
 		syncedAt:      time.Now(),
 		backupSrc:     "",
 		srcDir:        "",
@@ -147,7 +154,7 @@ func (mbs *MyBackupSystem) mkdir(path string, fileMode os.FileMode) error {
 	dirPath := mbs.backupDst + mbs.srcDir + after      // Monta o caminho correto para a cópia
 	err := os.Mkdir(dirPath, fileMode)
 
-	fmt.Printf("--- \n mkdir: %s! \n ---", dirPath,)
+	fmt.Printf("--- \n mkdir: %s! \n ---", dirPath)
 
 	return err
 }
