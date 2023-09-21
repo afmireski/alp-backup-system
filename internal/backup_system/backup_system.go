@@ -9,13 +9,11 @@ import (
 	"time"
 )
 
-type BackupSystem interface {
+type BackupSystemInterface interface {
 	SetBackupSrc(path string) error
 	Sync() error
-	EnablePeriodicBackup(interval uint64)
-	DisablePeriodicBackup()
-	periodicBackupTask()
-	serialize() // Serializa para um arquivo de configuração
+	saveConfigFile() 
+	loadConfigFile() 
 }
 
 type FileMetadata struct {
@@ -29,7 +27,7 @@ func (fm FileMetadata) String() string {
 	return fmt.Sprintf("{\n\t path=%s\nfilename=%s\nisDir=%t\nmodifiedAt=%s\t\n}", fm.Path, fm.Filename, fm.IsDir, fm.ModifiedAt)
 }
 
-type MyBackupSystem struct {
+type BackupSystem struct {
 	periodicBackup bool
 	backupInterval uint64
 	syncedAt       time.Time
@@ -39,7 +37,7 @@ type MyBackupSystem struct {
 	backupHistory  data_structures.BackupTable[FileMetadata]
 }
 
-func (mbs *MyBackupSystem) Print() {
+func (mbs *BackupSystem) Print() {
 	fmt.Println("\n\n-------------- BACKUP  SYSTEM --------------")
 	fmt.Println("- - - - - - - - - - - - - - - - - - - - - -")
 	fmt.Printf("| backupDst=%s |\n", mbs.backupDst)
@@ -51,8 +49,8 @@ func (mbs *MyBackupSystem) Print() {
 
 }
 
-func InitBackupSystem(dst string) MyBackupSystem {
-	return MyBackupSystem{
+func InitBackupSystem(dst string) BackupSystem {
+	return BackupSystem{
 		periodicBackup: false,
 		backupInterval: 0,
 		syncedAt:      time.Now(),
@@ -63,7 +61,7 @@ func InitBackupSystem(dst string) MyBackupSystem {
 	}
 }
 
-func (mbs *MyBackupSystem) SetBackupSrc(path string) error {
+func (mbs *BackupSystem) SetBackupSrc(path string) error {
 	fileInfo, err := os.Stat(path)
 
 	if err != nil {
@@ -78,7 +76,7 @@ func (mbs *MyBackupSystem) SetBackupSrc(path string) error {
 	return nil
 }
 
-func (mbs *MyBackupSystem) Sync() error {
+func (mbs *BackupSystem) Sync() error {
 	defer mbs.setSyncedAt()
 
 	if len(mbs.backupSrc) > 0 {
@@ -87,7 +85,7 @@ func (mbs *MyBackupSystem) Sync() error {
 	return nil
 }
 
-func (mbs *MyBackupSystem) sync(path string) error {
+func (mbs *BackupSystem) sync(path string) error {
 	pathInfo, pathErr := os.Lstat(path)
 
 	if pathErr == nil { // Existe o caminho para verificar
@@ -150,7 +148,7 @@ func (mbs *MyBackupSystem) sync(path string) error {
 	return nil
 }
 
-func (mbs *MyBackupSystem) mkdir(path string, fileMode os.FileMode) error {
+func (mbs *BackupSystem) mkdir(path string, fileMode os.FileMode) error {
 	after, _ := strings.CutPrefix(path, mbs.backupSrc) // Remove todo caminho até o diretório de backup
 	dirPath := mbs.backupDst + mbs.srcDir + after      // Monta o caminho correto para a cópia
 	err := os.Mkdir(dirPath, fileMode)
@@ -160,7 +158,7 @@ func (mbs *MyBackupSystem) mkdir(path string, fileMode os.FileMode) error {
 	return err
 }
 
-func (mbs *MyBackupSystem) copy(path string, fileMode os.FileMode) error {
+func (mbs *BackupSystem) copy(path string, fileMode os.FileMode) error {
 	fileData, err := os.ReadFile(path)
 	if err != nil {
 		return errors.New("Falha ao ler o conteúdo de " + path)
@@ -174,6 +172,6 @@ func (mbs *MyBackupSystem) copy(path string, fileMode os.FileMode) error {
 	return err
 }
 
-func (mbs *MyBackupSystem) setSyncedAt() {
+func (mbs *BackupSystem) setSyncedAt() {
 	mbs.syncedAt = time.Now()
 }
