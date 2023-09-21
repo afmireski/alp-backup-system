@@ -15,6 +15,7 @@ type BackupSystem interface {
 	EnablePeriodicBackup(interval uint64)
 	DisablePeriodicBackup()
 	periodicBackupTask()
+	serialize() // Serializa para um arquivo de configuração
 }
 
 type FileMetadata struct {
