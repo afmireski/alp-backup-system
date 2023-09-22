@@ -28,14 +28,6 @@ func CreateBackupTable[T any](m uint) BackupTable[T] {
 	}
 }
 
-func (bt BackupTable[T]) GetM() uint {
-	return bt.Size
-}
-
-func (bt BackupTable[T]) GetN() uint {
-	return bt.Len
-}
-
 func (bt *BackupTable[T]) Alpha() float32 {
 	return float32(bt.Len) / float32(bt.Size)
 }

@@ -43,10 +43,10 @@ type BackupSystem struct {
 func (bs *BackupSystem) Print() {
 	fmt.Println("\n\n-------------- BACKUP  SYSTEM --------------")
 	fmt.Println("- - - - - - - - - - - - - - - - - - - - - -")
-	fmt.Printf("| backupDst=%s |\n", bs.BackupDst)
-	fmt.Printf("| backupSrc=%s |\n", bs.BackupSrc)
-	fmt.Printf("| backupSrc=%s |\n", bs.SrcDir)
-	fmt.Printf("| syncedAt=%d/%d/%d  %d:%d:%d |\n", bs.SyncedAt.Year(), bs.SyncedAt.Month(), bs.SyncedAt.Day(), bs.SyncedAt.Hour(), bs.SyncedAt.Minute(), bs.SyncedAt.Second())
+	fmt.Printf("| BackupDst=%s |\n", bs.BackupDst)
+	fmt.Printf("| BackupSrc=%s |\n", bs.BackupSrc)
+	fmt.Printf("| SrcDir=%s |\n", bs.SrcDir)
+	fmt.Printf("| SyncedAt=%d/%d/%d  %d:%d:%d |\n", bs.SyncedAt.Year(), bs.SyncedAt.Month(), bs.SyncedAt.Day(), bs.SyncedAt.Hour(), bs.SyncedAt.Minute(), bs.SyncedAt.Second())
 	bs.BackupHistory.Print()
 	fmt.Println("- - - - - - - - - - - - - - - - - - - - - -\n\n")
 
