@@ -1,19 +1,23 @@
 package backup_system
 
 import (
+	"bytes"
+	"encoding/gob"
 	"errors"
 	"fmt"
-	"github.com/afmireski/alp-backup-system/internal/data_structures"
+	"log"
 	"os"
 	"strings"
 	"time"
+
+	"github.com/afmireski/alp-backup-system/internal/data_structures"
 )
 
 type BackupSystemInterface interface {
 	SetBackupSrc(path string) error
 	Sync() error
-	saveConfigFile() 
-	loadConfigFile() 
+	saveConfigFile()
+	loadConfigFile()
 }
 
 type FileMetadata struct {
@@ -28,40 +32,45 @@ func (fm FileMetadata) String() string {
 }
 
 type BackupSystem struct {
-	periodicBackup bool
-	backupInterval uint64
-	syncedAt       time.Time
-	backupSrc      string
-	srcDir         string
-	backupDst      string
-	backupHistory  data_structures.BackupTable[FileMetadata]
+	SyncedAt       time.Time                                 `json:"syncedAt" gob:"syncedAt"`
+	ConfigFilePath string                                    `json:"configFilePath" gob:"syncedAt"`
+	BackupSrc      string                                    `json:"backupSrc" gob:"syncedAt"`
+	SrcDir         string                                    `json:"srcDir" gob:"syncedAt"`
+	BackupDst      string                                    `json:"backupDst" gob:"syncedAt"`
+	BackupHistory  data_structures.BackupTable[FileMetadata] `json:"backupHistory" gob:"syncedAt"`
 }
 
-func (mbs *BackupSystem) Print() {
+func (bs *BackupSystem) Print() {
 	fmt.Println("\n\n-------------- BACKUP  SYSTEM --------------")
 	fmt.Println("- - - - - - - - - - - - - - - - - - - - - -")
-	fmt.Printf("| backupDst=%s |\n", mbs.backupDst)
-	fmt.Printf("| backupSrc=%s |\n", mbs.backupSrc)
-	fmt.Printf("| backupSrc=%s |\n", mbs.srcDir)
-	fmt.Printf("| syncedAt=%d/%d/%d  %d:%d:%d |\n", mbs.syncedAt.Year(), mbs.syncedAt.Month(), mbs.syncedAt.Day(), mbs.syncedAt.Hour(), mbs.syncedAt.Minute(), mbs.syncedAt.Second())
-	mbs.backupHistory.Print()
+	fmt.Printf("| backupDst=%s |\n", bs.BackupDst)
+	fmt.Printf("| backupSrc=%s |\n", bs.BackupSrc)
+	fmt.Printf("| backupSrc=%s |\n", bs.SrcDir)
+	fmt.Printf("| syncedAt=%d/%d/%d  %d:%d:%d |\n", bs.SyncedAt.Year(), bs.SyncedAt.Month(), bs.SyncedAt.Day(), bs.SyncedAt.Hour(), bs.SyncedAt.Minute(), bs.SyncedAt.Second())
+	bs.BackupHistory.Print()
 	fmt.Println("- - - - - - - - - - - - - - - - - - - - - -\n\n")
 
 }
 
-func InitBackupSystem(dst string) BackupSystem {
-	return BackupSystem{
-		periodicBackup: false,
-		backupInterval: 0,
-		syncedAt:      time.Now(),
-		backupSrc:     "",
-		srcDir:        "",
-		backupDst:     dst,
-		backupHistory: data_structures.CreateBackupTable[FileMetadata](50),
+func InitBackupSystem(dst, configPath string) BackupSystem {
+
+	bs, err := loadConfigFile(configPath)
+
+	if err != nil {
+		// Não conseguiu ler a config, então backup puro
+		return BackupSystem{
+			SyncedAt:       time.Now(),
+			BackupSrc:      "",
+			SrcDir:         "",
+			ConfigFilePath: configPath,
+			BackupDst:      dst,
+			BackupHistory:  data_structures.CreateBackupTable[FileMetadata](50),
+		}
 	}
+	return *bs
 }
 
-func (mbs *BackupSystem) SetBackupSrc(path string) error {
+func (bs *BackupSystem) SetBackupSrc(path string) error {
 	fileInfo, err := os.Stat(path)
 
 	if err != nil {
@@ -70,27 +79,30 @@ func (mbs *BackupSystem) SetBackupSrc(path string) error {
 		return errors.New("O seu caminho de backup deve apontar para um diretório")
 	}
 
-	mbs.backupSrc = path
-	mbs.srcDir = fileInfo.Name() // Obtém o nome útil do diretório de backup
+	bs.BackupSrc = path
+	bs.SrcDir = fileInfo.Name() // Obtém o nome útil do diretório de backup
 
 	return nil
 }
 
-func (mbs *BackupSystem) Sync() error {
-	defer mbs.setSyncedAt()
+func (bs *BackupSystem) Sync() error {
+	// Executam depois que Sync sair da pilha
+	defer bs.setSyncedAt()
+	defer bs.saveConfigFile()
+	// --
 
-	if len(mbs.backupSrc) > 0 {
-		return mbs.sync(mbs.backupSrc)
+	if len(bs.BackupSrc) > 0 {
+		return bs.sync(bs.BackupSrc)
 	}
 	return nil
 }
 
-func (mbs *BackupSystem) sync(path string) error {
+func (bs *BackupSystem) sync(path string) error {
 	pathInfo, pathErr := os.Lstat(path)
 
 	if pathErr == nil { // Existe o caminho para verificar
 		// Verifica se o caminho já existe no histórico
-		_, value, existsPath := mbs.backupHistory.Search(path)
+		_, value, existsPath := bs.BackupHistory.Search(path)
 
 		if pathInfo.IsDir() { // Verifica se o caminho aponta para um diretório
 			dirContent, dirErr := os.ReadDir(path) // Tenta ler o diretório
@@ -99,7 +111,7 @@ func (mbs *BackupSystem) sync(path string) error {
 				if len(dirContent) > 0 { // Verifica se o diretório não está vazio
 
 					if !existsPath {
-						mbs.mkdir(path, pathInfo.Mode())
+						bs.mkdir(path, pathInfo.Mode())
 
 						metadata := FileMetadata{
 							Path:       path,
@@ -107,11 +119,11 @@ func (mbs *BackupSystem) sync(path string) error {
 							IsDir:      pathInfo.IsDir(),
 							ModifiedAt: pathInfo.ModTime(),
 						}
-						mbs.backupHistory.Insert(path, metadata)
+						bs.BackupHistory.Insert(path, metadata)
 					}
 
 					for _, dirItem := range dirContent { // Percorre os conteúdos do diretório
-						mbs.sync(path + string(os.PathSeparator) + dirItem.Name()) // Sincroniza esses conteúdos
+						bs.sync(path + string(os.PathSeparator) + dirItem.Name()) // Sincroniza esses conteúdos
 					}
 				}
 			} else {
@@ -119,17 +131,13 @@ func (mbs *BackupSystem) sync(path string) error {
 			}
 		} else { // Se não é um diretório, então, é um arquivo
 			if existsPath {
-				fmt.Println("!!!Achou!!!")
-				fmt.Println(pathInfo.ModTime())
-				fmt.Println("==?")
-				fmt.Println(value.ModifiedAt)
 				// Verifica se o arquivo não foi modificado
 				if pathInfo.ModTime().Equal(value.ModifiedAt) {
 					return nil // Não faz nada
 				}
 			}
 
-			copyErr := mbs.copy(path, pathInfo.Mode())
+			copyErr := bs.copy(path, pathInfo.Mode())
 
 			if copyErr != nil {
 				return copyErr
@@ -142,15 +150,15 @@ func (mbs *BackupSystem) sync(path string) error {
 				ModifiedAt: pathInfo.ModTime(),
 			}
 
-			mbs.backupHistory.Insert(path, metadata) // Atualiza o histórico de Backup
+			bs.BackupHistory.Insert(path, metadata) // Atualiza o histórico de Backup
 		}
 	}
 	return nil
 }
 
-func (mbs *BackupSystem) mkdir(path string, fileMode os.FileMode) error {
-	after, _ := strings.CutPrefix(path, mbs.backupSrc) // Remove todo caminho até o diretório de backup
-	dirPath := mbs.backupDst + mbs.srcDir + after      // Monta o caminho correto para a cópia
+func (bs *BackupSystem) mkdir(path string, fileMode os.FileMode) error {
+	after, _ := strings.CutPrefix(path, bs.BackupSrc) // Remove todo caminho até o diretório de backup
+	dirPath := bs.BackupDst + bs.SrcDir + after       // Monta o caminho correto para a cópia
 	err := os.Mkdir(dirPath, fileMode)
 
 	fmt.Printf("--- \n mkdir: %s! \n ---", dirPath)
@@ -158,13 +166,13 @@ func (mbs *BackupSystem) mkdir(path string, fileMode os.FileMode) error {
 	return err
 }
 
-func (mbs *BackupSystem) copy(path string, fileMode os.FileMode) error {
+func (bs *BackupSystem) copy(path string, fileMode os.FileMode) error {
 	fileData, err := os.ReadFile(path)
 	if err != nil {
 		return errors.New("Falha ao ler o conteúdo de " + path)
 	}
-	after, _ := strings.CutPrefix(path, mbs.backupSrc) // Remove todo caminho até o diretório de backup
-	bPath := mbs.backupDst + mbs.srcDir + after        // Monta o caminho correto para a cópia
+	after, _ := strings.CutPrefix(path, bs.BackupSrc) // Remove todo caminho até o diretório de backup
+	bPath := bs.BackupDst + bs.SrcDir + after         // Monta o caminho correto para a cópia
 
 	err = os.WriteFile(bPath, fileData, fileMode)
 
@@ -172,6 +180,42 @@ func (mbs *BackupSystem) copy(path string, fileMode os.FileMode) error {
 	return err
 }
 
-func (mbs *BackupSystem) setSyncedAt() {
-	mbs.syncedAt = time.Now()
+func (bs *BackupSystem) setSyncedAt() {
+	bs.SyncedAt = time.Now()
+}
+
+func (bs* BackupSystem) saveConfigFile() {
+	var buffer bytes.Buffer
+	encoder := gob.NewEncoder(&buffer)
+
+	err := encoder.Encode(bs)
+	if err != nil {
+		log.Fatal("Houve uma falha ao salvar as configurações do sistema: ", err)
+	}
+
+	err = os.WriteFile(bs.ConfigFilePath, buffer.Bytes(), 0666)
+
+	if err != nil {
+		log.Fatal("Houve uma falha ao salvar o arquivo de configuração: ", err)
+	}
+}
+
+func loadConfigFile(path string) (*BackupSystem, error) {
+	data, err := os.ReadFile(path)
+
+	if err != nil {
+		return nil, err
+	}
+
+	var loadedBackup BackupSystem
+	buffer := bytes.NewBuffer(data)
+	decoder := gob.NewDecoder(buffer)
+
+	err = decoder.Decode(&loadedBackup)
+
+	if err != nil {
+		return nil, err
+	}
+
+	return &loadedBackup, nil
 }

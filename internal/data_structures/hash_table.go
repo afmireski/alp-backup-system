@@ -12,34 +12,32 @@ type HashTable[T any] interface {
 	Search(key string) (string, T, bool)
 	Resize()
 	Print()
-	GetM() uint
-	GetN() uint
 }
 
 type BackupTable[T any] struct {
-	size uint // M
-	len  uint // N
-	data map[string]T
+	Size uint         `json:"size" gob:"size"`
+	Len  uint         `json:"len" gob:"len"`
+	Data map[string]T `json:"data" gob:"data"`
 }
 
 func CreateBackupTable[T any](m uint) BackupTable[T] {
 	return BackupTable[T]{
-		size: m,
-		len:  0,
-		data: make(map[string]T, m),
+		Size: m,
+		Len:  0,
+		Data: make(map[string]T, m),
 	}
 }
 
 func (bt BackupTable[T]) GetM() uint {
-	return bt.size
+	return bt.Size
 }
 
 func (bt BackupTable[T]) GetN() uint {
-	return bt.len
+	return bt.Len
 }
 
 func (bt *BackupTable[T]) Alpha() float32 {
-	return float32(bt.len) / float32(bt.size)
+	return float32(bt.Len) / float32(bt.Size)
 }
 
 func (bt *BackupTable[T]) Hash(key string) string {
@@ -50,19 +48,19 @@ func (bt *BackupTable[T]) Hash(key string) string {
 func (bt *BackupTable[T]) Search(key string) (string, T, bool) {
 	hashKey := bt.Hash(key)
 
-	value, exists := bt.data[hashKey]
+	value, exists := bt.Data[hashKey]
 
 	return hashKey, value, exists
 }
 
 func (bt *BackupTable[T]) Resize(newM uint) {
 	newData := make(map[string]T, newM)
-	for key, value := range bt.data {
+	for key, value := range bt.Data {
 		newData[key] = value
 	}
 
-	bt.size = newM
-	bt.data = newData
+	bt.Size = newM
+	bt.Data = newData
 }
 
 func (bt *BackupTable[T]) Insert(key string, value T) string {
@@ -70,22 +68,22 @@ func (bt *BackupTable[T]) Insert(key string, value T) string {
 
 	if !exists {
 		if bt.Alpha() > 0.5 {
-			bt.Resize(bt.size * 2)
+			bt.Resize(bt.Size * 2)
 		}
 
-		bt.len++
+		bt.Len++
 	}
 
-	bt.data[hash] = value
+	bt.Data[hash] = value
 
 	return hash
 }
 
 func (bt *BackupTable[T]) Print() {
 	fmt.Println("-------------- BACKUP  TABLE --------------")
-	fmt.Printf("| m = %d --------------------------- n = %d |\n", bt.size, bt.len)
+	fmt.Printf("| m = %d --------------------------- n = %d |\n", bt.Size, bt.Len)
 	fmt.Println("- - - - - - - - - - - - - - - - - - - - - -")
-	for key, value := range bt.data {
+	for key, value := range bt.Data {
 		fmt.Printf("| %x | %s |\n", key, value)
 	}
 	fmt.Println("- - - - - - - - - - - - - - - - - - - - - -")
