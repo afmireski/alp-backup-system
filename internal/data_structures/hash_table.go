@@ -78,11 +78,13 @@ func (bt *BackupTable[T]) Remove(key string) {
 
 	if exists {
 		delete(bt.Data, hash)
+		bt.Len--
 	}
 }
 
 func (bt *BackupTable[T]) RemoveByHash(hash string) {	
 	delete(bt.Data, hash)
+	bt.Len--
 }
 
 func (bt *BackupTable[T]) Print() {
