@@ -40,13 +40,13 @@ func (fm FileMetadata) String() string {
 }
 
 type BackupSystem struct {
-	SyncedAt       time.Time                                 `json:"syncedAt" gob:"syncedAt"`
-	ConfigFilePath string                                    `json:"configFilePath" gob:"syncedAt"`
-	BackupSrc      string                                    `json:"backupSrc" gob:"syncedAt"`
-	SrcDir         string                                    `json:"srcDir" gob:"syncedAt"`
-	BackupDst      string                                    `json:"backupDst" gob:"syncedAt"`
-	BackupHistory  data_structures.BackupTable[FileMetadata] `json:"backupHistory" gob:"syncedAt"`
-	BackupMode     BackupModeEnum                            `json:"backupMode" gob:"backupMode" `
+	SyncedAt       time.Time                                 
+	ConfigFilePath string                                    
+	BackupSrc      string                                    
+	SrcDir         string                                    
+	BackupDst      string                                    
+	BackupHistory  data_structures.BackupTable[FileMetadata] 
+	BackupMode     BackupModeEnum                            
 }
 
 func (bs *BackupSystem) Print() {
@@ -178,8 +178,11 @@ func (bs *BackupSystem) removeDeletedFiles() {
 
 			// Verifica se cada arquivo salvo na hash continua na origem
 			if os.IsNotExist(err) { 
-				// Caso não exista mais, remove da hash
-				bs.BackupHistory.RemoveByHash(key)
+				err := bs.del(value.Path) // Tenta excluir o arquivo no backup
+				if err == nil {
+					// Caso tenha conseguido excluir, remove da hash
+					bs.BackupHistory.RemoveByHash(key)
+				}
 			}
 		}
 	}
@@ -207,6 +210,15 @@ func (bs *BackupSystem) copy(path string, fileMode os.FileMode) error {
 
 	fmt.Printf("--- \n copy: %s \n para \n %s \n ---", path, bPath)
 	return err
+}
+
+func (bs *BackupSystem) del(path string) error {
+	after, _ := strings.CutPrefix(path, bs.BackupSrc) // Remove todo caminho até o diretório de backup
+	bPath := bs.BackupDst + bs.SrcDir + after         // Monta o caminho para o backup
+
+	fmt.Printf("--- \n del: %s \n ---", bPath)
+
+	return os.Remove(bPath)
 }
 
 func (bs *BackupSystem) setSyncedAt() {

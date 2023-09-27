@@ -17,9 +17,9 @@ type HashTable[T any] interface {
 }
 
 type BackupTable[T any] struct {
-	Size uint         `json:"size" gob:"size"`
-	Len  uint         `json:"len" gob:"len"`
-	Data map[string]T `json:"data" gob:"data"`
+	Size uint        
+	Len  uint        
+	Data map[string]T
 }
 
 func CreateBackupTable[T any](m uint) BackupTable[T] {
