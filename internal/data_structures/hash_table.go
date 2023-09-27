@@ -10,6 +10,8 @@ type HashTable[T any] interface {
 	Alpha() float32
 	Insert(key string, value T) string
 	Search(key string) (string, T, bool)
+	Remove(key string) 
+	RemoveByHash(hash string)
 	Resize()
 	Print()
 }
@@ -69,6 +71,18 @@ func (bt *BackupTable[T]) Insert(key string, value T) string {
 	bt.Data[hash] = value
 
 	return hash
+}
+
+func (bt *BackupTable[T]) Remove(key string) {
+	hash, _, exists := bt.Search(key)
+
+	if exists {
+		delete(bt.Data, hash)
+	}
+}
+
+func (bt *BackupTable[T]) RemoveByHash(hash string) {	
+	delete(bt.Data, hash)
 }
 
 func (bt *BackupTable[T]) Print() {

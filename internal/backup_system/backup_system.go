@@ -13,11 +13,14 @@ import (
 	"github.com/afmireski/alp-backup-system/internal/data_structures"
 )
 
+type BackupModeEnum int
+
 type BackupSystemInterface interface {
 	SetBackupSrc(path string) error
 	Sync() error
+	SetMode(newMode BackupModeEnum) error
 	saveConfigFile()
-	loadConfigFile()
+	loadConfigFile(path string)
 }
 
 type FileMetadata struct {
@@ -26,6 +29,11 @@ type FileMetadata struct {
 	IsDir      bool
 	ModifiedAt time.Time
 }
+
+const (
+	MIRROR BackupModeEnum = iota
+	PERSISTANCE
+)
 
 func (fm FileMetadata) String() string {
 	return fmt.Sprintf("{\n\t path=%s\nfilename=%s\nisDir=%t\nmodifiedAt=%s\t\n}", fm.Path, fm.Filename, fm.IsDir, fm.ModifiedAt)
@@ -38,6 +46,7 @@ type BackupSystem struct {
 	SrcDir         string                                    `json:"srcDir" gob:"syncedAt"`
 	BackupDst      string                                    `json:"backupDst" gob:"syncedAt"`
 	BackupHistory  data_structures.BackupTable[FileMetadata] `json:"backupHistory" gob:"syncedAt"`
+	BackupMode     BackupModeEnum                            `json:"backupMode" gob:"backupMode" `
 }
 
 func (bs *BackupSystem) Print() {
@@ -65,6 +74,7 @@ func InitBackupSystem(dst, configPath string) BackupSystem {
 			ConfigFilePath: configPath,
 			BackupDst:      dst,
 			BackupHistory:  data_structures.CreateBackupTable[FileMetadata](50),
+			BackupMode:     MIRROR,
 		}
 	}
 	return *bs
@@ -87,6 +97,7 @@ func (bs *BackupSystem) SetBackupSrc(path string) error {
 
 func (bs *BackupSystem) Sync() error {
 	// Executam depois que Sync sair da pilha
+	defer bs.removeDeletedFiles()
 	defer bs.setSyncedAt()
 	defer bs.saveConfigFile()
 	// --
@@ -123,7 +134,10 @@ func (bs *BackupSystem) sync(path string) error {
 					}
 
 					for _, dirItem := range dirContent { // Percorre os conteúdos do diretório
-						bs.sync(path + string(os.PathSeparator) + dirItem.Name()) // Sincroniza esses conteúdos
+						syncErr := bs.sync(path + string(os.PathSeparator) + dirItem.Name()) // Sincroniza esses conteúdos
+						if syncErr != nil {
+							return syncErr
+						}
 					}
 				}
 			} else {
@@ -156,6 +170,21 @@ func (bs *BackupSystem) sync(path string) error {
 	return nil
 }
 
+func (bs *BackupSystem) removeDeletedFiles() {
+	if bs.BackupMode == MIRROR {
+		// Percorre a tabela hash inteira se o MIRROR mod estiver ativo.
+		for key, value := range bs.BackupHistory.Data {
+			_, err := os.Stat(value.Path)
+
+			// Verifica se cada arquivo salvo na hash continua na origem
+			if os.IsNotExist(err) { 
+				// Caso não exista mais, remove da hash
+				bs.BackupHistory.RemoveByHash(key)
+			}
+		}
+	}
+}
+
 func (bs *BackupSystem) mkdir(path string, fileMode os.FileMode) error {
 	after, _ := strings.CutPrefix(path, bs.BackupSrc) // Remove todo caminho até o diretório de backup
 	dirPath := bs.BackupDst + bs.SrcDir + after       // Monta o caminho correto para a cópia
@@ -184,7 +213,7 @@ func (bs *BackupSystem) setSyncedAt() {
 	bs.SyncedAt = time.Now()
 }
 
-func (bs* BackupSystem) saveConfigFile() {
+func (bs *BackupSystem) saveConfigFile() {
 	var buffer bytes.Buffer
 	encoder := gob.NewEncoder(&buffer)
 
