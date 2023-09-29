@@ -171,8 +171,8 @@ func (bs *BackupSystem) sync(path string) error {
 }
 
 func (bs *BackupSystem) removeDeletedFiles() {
-	if bs.BackupMode == MIRROR {
-		// Percorre a tabela hash inteira se o MIRROR mod estiver ativo.
+	if bs.BackupMode == MIRROR && bs.BackupHistory.Len > 0 {
+		// Percorre a tabela hash inteira se o MIRROR mod estiver ativo e tiver algo gravado no histórico.
 		for key, value := range bs.BackupHistory.Data {
 			_, err := os.Stat(value.Path)
 
