@@ -18,7 +18,7 @@ type BackupModeEnum int
 type BackupSystemInterface interface {
 	SetBackupSrc(path string) error
 	Sync() error
-	SetMode(newMode BackupModeEnum) error
+	SetMode(newMode BackupModeEnum)
 	saveConfigFile()
 	loadConfigFile(path string)
 }
@@ -31,7 +31,7 @@ type FileMetadata struct {
 }
 
 const (
-	MIRROR BackupModeEnum = iota
+	MIRROR BackupModeEnum = iota // representa uma sequência de inteiros sem tipo
 	PERSISTANCE
 )
 
@@ -40,18 +40,24 @@ func (fm FileMetadata) String() string {
 }
 
 type BackupSystem struct {
-	SyncedAt       time.Time                                 
-	ConfigFilePath string                                    
-	BackupSrc      string                                    
-	SrcDir         string                                    
-	BackupDst      string                                    
-	BackupHistory  data_structures.BackupTable[FileMetadata] 
-	BackupMode     BackupModeEnum                            
+	SyncedAt       time.Time
+	ConfigFilePath string
+	BackupSrc      string
+	SrcDir         string
+	BackupDst      string
+	BackupHistory  data_structures.BackupTable[FileMetadata]
+	BackupMode     BackupModeEnum
 }
 
 func (bs *BackupSystem) Print() {
 	fmt.Println("\n\n-------------- BACKUP  SYSTEM --------------")
 	fmt.Println("- - - - - - - - - - - - - - - - - - - - - -")
+	switch mode := bs.BackupMode; mode {
+	case MIRROR:
+		fmt.Printf("| Mode=MIRROR |\n")
+	default:
+		fmt.Printf("| Mode=PERSISTANCE |\n")
+	}
 	fmt.Printf("| BackupDst=%s |\n", bs.BackupDst)
 	fmt.Printf("| BackupSrc=%s |\n", bs.BackupSrc)
 	fmt.Printf("| SrcDir=%s |\n", bs.SrcDir)
@@ -80,6 +86,11 @@ func InitBackupSystem(dst, configPath string) BackupSystem {
 	return *bs
 }
 
+func (bs *BackupSystem) SetMode(newMode BackupModeEnum) {
+	bs.BackupMode = newMode
+	defer bs.saveConfigFile()
+}
+
 func (bs *BackupSystem) SetBackupSrc(path string) error {
 	fileInfo, err := os.Stat(path)
 
@@ -97,9 +108,9 @@ func (bs *BackupSystem) SetBackupSrc(path string) error {
 
 func (bs *BackupSystem) Sync() error {
 	// Executam depois que Sync sair da pilha
-	defer bs.removeDeletedFiles()
-	defer bs.setSyncedAt()
-	defer bs.saveConfigFile()
+	defer bs.saveConfigFile()     // 3
+	defer bs.removeDeletedFiles() // 2
+	defer bs.setSyncedAt()        // 1
 	// --
 
 	if len(bs.BackupSrc) > 0 {
@@ -177,8 +188,9 @@ func (bs *BackupSystem) removeDeletedFiles() {
 			_, err := os.Stat(value.Path)
 
 			// Verifica se cada arquivo salvo na hash continua na origem
-			if os.IsNotExist(err) { 
+			if os.IsNotExist(err) {
 				err := bs.del(value.Path) // Tenta excluir o arquivo no backup
+				fmt.Println(err)
 				if err == nil {
 					// Caso tenha conseguido excluir, remove da hash
 					bs.BackupHistory.RemoveByHash(key)
