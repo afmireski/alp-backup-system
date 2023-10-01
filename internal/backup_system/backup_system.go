@@ -13,11 +13,14 @@ import (
 	"github.com/afmireski/alp-backup-system/internal/data_structures"
 )
 
+type BackupModeEnum int
+
 type BackupSystemInterface interface {
 	SetBackupSrc(path string) error
 	Sync() error
+	SetMode(newMode BackupModeEnum)
 	saveConfigFile()
-	loadConfigFile()
+	loadConfigFile(path string)
 }
 
 type FileMetadata struct {
@@ -27,22 +30,34 @@ type FileMetadata struct {
 	ModifiedAt time.Time
 }
 
+const (
+	MIRROR BackupModeEnum = iota // representa uma sequência de inteiros sem tipo
+	PERSISTANCE
+)
+
 func (fm FileMetadata) String() string {
 	return fmt.Sprintf("{\n\t path=%s\nfilename=%s\nisDir=%t\nmodifiedAt=%s\t\n}", fm.Path, fm.Filename, fm.IsDir, fm.ModifiedAt)
 }
 
 type BackupSystem struct {
-	SyncedAt       time.Time                                 `json:"syncedAt" gob:"syncedAt"`
-	ConfigFilePath string                                    `json:"configFilePath" gob:"syncedAt"`
-	BackupSrc      string                                    `json:"backupSrc" gob:"syncedAt"`
-	SrcDir         string                                    `json:"srcDir" gob:"syncedAt"`
-	BackupDst      string                                    `json:"backupDst" gob:"syncedAt"`
-	BackupHistory  data_structures.BackupTable[FileMetadata] `json:"backupHistory" gob:"syncedAt"`
+	SyncedAt       time.Time
+	ConfigFilePath string
+	BackupSrc      string
+	SrcDir         string
+	BackupDst      string
+	BackupHistory  data_structures.BackupTable[FileMetadata]
+	BackupMode     BackupModeEnum
 }
 
 func (bs *BackupSystem) Print() {
 	fmt.Println("\n\n-------------- BACKUP  SYSTEM --------------")
 	fmt.Println("- - - - - - - - - - - - - - - - - - - - - -")
+	switch mode := bs.BackupMode; mode {
+	case MIRROR:
+		fmt.Printf("| Mode=MIRROR |\n")
+	default:
+		fmt.Printf("| Mode=PERSISTANCE |\n")
+	}
 	fmt.Printf("| BackupDst=%s |\n", bs.BackupDst)
 	fmt.Printf("| BackupSrc=%s |\n", bs.BackupSrc)
 	fmt.Printf("| SrcDir=%s |\n", bs.SrcDir)
@@ -65,9 +80,15 @@ func InitBackupSystem(dst, configPath string) BackupSystem {
 			ConfigFilePath: configPath,
 			BackupDst:      dst,
 			BackupHistory:  data_structures.CreateBackupTable[FileMetadata](50),
+			BackupMode:     MIRROR,
 		}
 	}
 	return *bs
+}
+
+func (bs *BackupSystem) SetMode(newMode BackupModeEnum) {
+	bs.BackupMode = newMode
+	defer bs.saveConfigFile()
 }
 
 func (bs *BackupSystem) SetBackupSrc(path string) error {
@@ -87,8 +108,9 @@ func (bs *BackupSystem) SetBackupSrc(path string) error {
 
 func (bs *BackupSystem) Sync() error {
 	// Executam depois que Sync sair da pilha
-	defer bs.setSyncedAt()
-	defer bs.saveConfigFile()
+	defer bs.saveConfigFile()     // 3
+	defer bs.removeDeletedFiles() // 2
+	defer bs.setSyncedAt()        // 1
 	// --
 
 	if len(bs.BackupSrc) > 0 {
@@ -123,7 +145,10 @@ func (bs *BackupSystem) sync(path string) error {
 					}
 
 					for _, dirItem := range dirContent { // Percorre os conteúdos do diretório
-						bs.sync(path + string(os.PathSeparator) + dirItem.Name()) // Sincroniza esses conteúdos
+						syncErr := bs.sync(path + string(os.PathSeparator) + dirItem.Name()) // Sincroniza esses conteúdos
+						if syncErr != nil {
+							return syncErr
+						}
 					}
 				}
 			} else {
@@ -156,6 +181,25 @@ func (bs *BackupSystem) sync(path string) error {
 	return nil
 }
 
+func (bs *BackupSystem) removeDeletedFiles() {
+	if bs.BackupMode == MIRROR && bs.BackupHistory.Len > 0 {
+		// Percorre a tabela hash inteira se o MIRROR mod estiver ativo e tiver algo gravado no histórico.
+		for key, value := range bs.BackupHistory.Data {
+			_, err := os.Stat(value.Path)
+
+			// Verifica se cada arquivo salvo na hash continua na origem
+			if os.IsNotExist(err) {
+				err := bs.del(value.Path) // Tenta excluir o arquivo no backup
+				fmt.Println(err)
+				if err == nil {
+					// Caso tenha conseguido excluir, remove da hash
+					bs.BackupHistory.RemoveByHash(key)
+				}
+			}
+		}
+	}
+}
+
 func (bs *BackupSystem) mkdir(path string, fileMode os.FileMode) error {
 	after, _ := strings.CutPrefix(path, bs.BackupSrc) // Remove todo caminho até o diretório de backup
 	dirPath := bs.BackupDst + bs.SrcDir + after       // Monta o caminho correto para a cópia
@@ -180,11 +224,20 @@ func (bs *BackupSystem) copy(path string, fileMode os.FileMode) error {
 	return err
 }
 
+func (bs *BackupSystem) del(path string) error {
+	after, _ := strings.CutPrefix(path, bs.BackupSrc) // Remove todo caminho até o diretório de backup
+	bPath := bs.BackupDst + bs.SrcDir + after         // Monta o caminho para o backup
+
+	fmt.Printf("--- \n del: %s \n ---", bPath)
+
+	return os.Remove(bPath)
+}
+
 func (bs *BackupSystem) setSyncedAt() {
 	bs.SyncedAt = time.Now()
 }
 
-func (bs* BackupSystem) saveConfigFile() {
+func (bs *BackupSystem) saveConfigFile() {
 	var buffer bytes.Buffer
 	encoder := gob.NewEncoder(&buffer)
 
