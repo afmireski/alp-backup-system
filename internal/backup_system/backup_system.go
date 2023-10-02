@@ -5,7 +5,6 @@ import (
 	"encoding/gob"
 	"errors"
 	"fmt"
-	"log"
 	"os"
 	"strings"
 	"time"
@@ -40,13 +39,13 @@ func (fm FileMetadata) String() string {
 }
 
 type BackupSystem struct {
-	SyncedAt       time.Time
-	ConfigFilePath string
-	BackupSrc      string
-	SrcDir         string
-	BackupDst      string
-	BackupHistory  data_structures.BackupTable[FileMetadata]
-	BackupMode     BackupModeEnum
+	SyncedAt       time.Time `json:"synced_at"`
+	ConfigFilePath string `json:"config_file_path"`
+	BackupSrc      string `json:"backup_src"`
+	SrcDir         string `json:"src_dir"`
+	BackupDst      string `json:"backup_dst"`
+	BackupHistory  data_structures.BackupTable [FileMetadata] `json:"-"`
+	BackupMode     BackupModeEnum `json:"backup_mode"`
 }
 
 func (bs *BackupSystem) Print() {
@@ -58,6 +57,7 @@ func (bs *BackupSystem) Print() {
 	default:
 		fmt.Printf("| Mode=PERSISTANCE |\n")
 	}
+	fmt.Printf("| ConfigFilePath=%s |\n", bs.ConfigFilePath)
 	fmt.Printf("| BackupDst=%s |\n", bs.BackupDst)
 	fmt.Printf("| BackupSrc=%s |\n", bs.BackupSrc)
 	fmt.Printf("| SrcDir=%s |\n", bs.SrcDir)
@@ -68,7 +68,12 @@ func (bs *BackupSystem) Print() {
 }
 
 func InitBackupSystem(dst, configPath string) BackupSystem {
-
+	if !strings.HasSuffix(dst, "/") {
+		dst = dst + "/"
+	}
+	if strings.HasSuffix(configPath, "/") {
+		configPath, _ = strings.CutSuffix(configPath, "/")
+	}
 	bs, err := loadConfigFile(configPath)
 
 	if err != nil {
@@ -83,23 +88,31 @@ func InitBackupSystem(dst, configPath string) BackupSystem {
 			BackupMode:     MIRROR,
 		}
 	}
+
 	return *bs
 }
 
 func (bs *BackupSystem) SetMode(newMode BackupModeEnum) {
-	bs.BackupMode = newMode
+	switch newMode {
+	case MIRROR:
+		bs.BackupMode = MIRROR
+	default:
+		bs.BackupMode = PERSISTANCE
+	}
 	defer bs.saveConfigFile()
 }
 
 func (bs *BackupSystem) SetBackupSrc(path string) error {
+	path, _ = strings.CutSuffix(path, "/")
+
 	fileInfo, err := os.Stat(path)
 
 	if err != nil {
 		return err
 	} else if !fileInfo.IsDir() {
-		return errors.New("O seu caminho de backup deve apontar para um diretório")
+		return errors.New("o seu caminho de backup deve apontar para um diretório")
 	}
-
+	
 	bs.BackupSrc = path
 	bs.SrcDir = fileInfo.Name() // Obtém o nome útil do diretório de backup
 
@@ -243,13 +256,13 @@ func (bs *BackupSystem) saveConfigFile() {
 
 	err := encoder.Encode(bs)
 	if err != nil {
-		log.Fatal("Houve uma falha ao salvar as configurações do sistema: ", err)
+		fmt.Println("Houve uma falha ao salvar as configurações do sistema: ", err)
 	}
 
 	err = os.WriteFile(bs.ConfigFilePath, buffer.Bytes(), 0666)
 
 	if err != nil {
-		log.Fatal("Houve uma falha ao salvar o arquivo de configuração: ", err)
+		fmt.Println("Houve uma falha ao salvar o arquivo de configuração: ", err)
 	}
 }
 

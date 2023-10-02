@@ -1,0 +1,30 @@
+POST http://localhost:3000/alp-backup/setBackupSrc HTTP/1.1
+content-type: application/json
+
+{
+    "path": "/home/afmireski/Área de trabalho/tmp/"
+}
+
+### 
+# Muda o Modo para MIRROR
+POST http://localhost:3000/alp-backup/changeMode HTTP/1.1
+content-type: application/json
+
+{
+    "mode": 0
+}
+
+###
+# Muda o Modo para PERSISTANCE
+POST http://localhost:3000/alp-backup/changeMode HTTP/1.1
+content-type: application/json
+
+{
+    "mode": 1
+}
+
+###
+
+POST http://localhost:3000/alp-backup/sync HTTP/1.1
+content-type: application/json
+
