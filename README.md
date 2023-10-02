@@ -15,6 +15,9 @@ git clone git@github.com:afmireski/alp-backup-system.git
 # Vá até a pasta do projeto
 cd alp-backup-system/
 
+# Faça download dos módulos necessários
+go mod tidy
+
 # Execute main.go
 go run ./cmd/server/main.go
 ```
