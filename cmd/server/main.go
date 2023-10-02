@@ -1,65 +1,86 @@
 package main
 
 import (
-	"crypto/sha256"
 	"fmt"
-	"data_structures"
+	"net/http"
+	"os"
+	"strings"
+
+	"github.com/afmireski/alp-backup-system/internal/backup_system"
+	"github.com/gin-gonic/gin"
 )
 
-func main() {
-	hashTable := data_structures.CreateHashTable[int](100)
-
-	key := "exemplo"
-	value := 42
-
-	hash := hashTable.Hash(key)
-	insertedKey := hashTable.Insert(key, value)
-	fmt.Printf("Chave inserida: %s\n", insertedKey)
-
-	foundHash, foundValue, exists := hashTable.Search(key)
-	if exists {
-		fmt.Printf("Chave encontrada: %s, Valor: %v\n", foundHash, foundValue)
-	} else {
-		fmt.Println("Chave não encontrada.")
-	}
-
-	backupTable := data_structures.CreateBackupTable[int](50) 
-
-	key2 := "exemplo2"
-	value2 := 24
-
-	hash2 := backupTable.Hash(key2)
-	insertedKey2 := backupTable.Insert(key2, value2)
-	fmt.Printf("Chave inserida na tabela de backup: %s\n", insertedKey2)
-
-	http.HandleFunc("/api/requisicao", func(w http.ResponseWriter, r *http.Request) {
-		if r.Method == http.MethodPost {
-
-			requestData := map[string]interface{}{
-				"chave": "exemplo",
-				"valor": 42,
-			}
-
-			chave := requestData["chave"].(string)
-			valor := int(requestData["valor"].(float64))
-
-			hash := hashTable.Hash(chave)
-
-			insertedKey := hashTable.Insert(chave, valor)
-			fmt.Printf("Chave inserida: %s\n", insertedKey)
-
-			w.WriteHeader(http.StatusOK)
-			fmt.Fprintf(w, "Chave inserida com sucesso: %s\n", insertedKey)
-		} else {
-			w.WriteHeader(http.StatusMethodNotAllowed)
-			fmt.Fprintln(w, "Método não permitido. Utilize POST.")
-		}
-	})
-
-	http.ListenAndServe(":8080", nil)
+type SetBackupSrcInput struct {
+	Path string `json:"path"`
 }
 
-func (bt *data_structures.BackupTable[int]) Hash(key string) string {
-	shaBytes := sha256.Sum256([]byte(key))
-	return string(shaBytes[:])
+type SetModeSrcInput struct {
+	Mode backup_system.BackupModeEnum `json:"mode"`
+}
+
+var bs backup_system.BackupSystem
+
+func setBackupSrc(c *gin.Context) {
+	var input SetBackupSrcInput
+
+	if err := c.BindJSON(&input); err != nil {
+		c.IndentedJSON(http.StatusBadRequest, gin.H{"error": "Input inválido"})
+		return
+	} else if len(input.Path) <= 0 {
+		c.IndentedJSON(http.StatusBadRequest, gin.H{"error": "O caminho deve ser informado"})
+		return
+	}
+
+	err := bs.SetBackupSrc(input.Path)
+
+	if err != nil {
+		c.IndentedJSON(http.StatusInternalServerError, gin.H{"error": "Houve uma falha ao definir a fonte do Backup"})
+		return
+	}
+
+	c.IndentedJSON(http.StatusOK, bs)
+}
+
+func sync(c *gin.Context) {
+
+	err := bs.Sync()
+
+	fmt.Println(err)
+	if err != nil {
+		c.IndentedJSON(http.StatusInternalServerError, gin.H{"error": "Houve uma falha ao sincronizar o Backup, tente novamente mais tarde"})
+		return
+	}
+
+	c.IndentedJSON(http.StatusOK, bs)
+}
+
+func changeMode(c *gin.Context) {
+
+	var input SetModeSrcInput
+
+	if err := c.BindJSON(&input); err != nil {
+		c.IndentedJSON(http.StatusBadRequest, gin.H{"error": "Input inválido"})
+		return
+	} 
+
+	bs.SetMode(input.Mode)	
+
+	c.IndentedJSON(http.StatusOK, bs)
+}
+
+func main() {
+	workDir, _ := os.Getwd()
+	workDir, _ = strings.CutSuffix(workDir, "cmd/server")
+
+	dst := workDir + "/backup"
+	configPath := workDir + "/config"
+
+	bs = backup_system.InitBackupSystem(dst, configPath)
+
+	router := gin.New()
+	router.Use(gin.Logger())
+	router.POST("/alp-backup/setBackupSrc", setBackupSrc)
+	router.POST("/alp-backup/sync", sync)
+	router.POST("/alp-backup/changeMode", changeMode)
+	router.Run("localhost:3000") // Inicia o servidor
 }
